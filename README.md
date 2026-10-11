@@ -1,0 +1,2 @@
+# SNAKE-RATING
+貪食蛇
