@@ -1,0 +1,529 @@
+<title>評等分類蛇</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<style>
+/* Layout: single narrow column — title, scoreboard strip, game board (navy "rating screen"), touch pad, rating cheat sheet */
+:root{
+  --bg:#edf0f2;
+  --panel:#ffffff;
+  --ink:#16212b;
+  --muted:#5a6772;
+  --line:#d3d9de;
+  --board:#182633;
+  --grid:rgba(255,255,255,.07);
+  --snake:#e3a63b;
+  --snake-head:#c8842a;
+  --chip:#f4f0e6;
+  --chip-ink:#182633;
+  --good:#2b9877;
+  --bad:#d2523d;
+  --font-display:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  --font-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e151b; --panel:#16212a; --ink:#e5eaee; --muted:#93a0aa; --line:#283741;
+    --board:#13202a; --grid:rgba(255,255,255,.06);
+    --good:#45b892; --bad:#e86a55; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e151b; --panel:#16212a; --ink:#e5eaee; --muted:#93a0aa; --line:#283741;
+  --board:#13202a; --grid:rgba(255,255,255,.06);
+  --good:#45b892; --bad:#e86a55; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);padding:0 16px;padding-block:18px 32px;line-height:1.55}
+.wrap{max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+
+header{display:flex;flex-direction:column;gap:2px}
+.eyebrow{font-size:12px;letter-spacing:.12em;color:var(--muted);font-weight:500}
+h1{font-family:var(--font-display);font-weight:900;font-size:32px;line-height:1.15;margin:0;text-wrap:balance;letter-spacing:.02em}
+.rule{font-size:14px;color:var(--muted);margin:2px 0 0}
+.rule b{color:var(--ink);font-family:var(--font-mono);font-weight:700}
+
+.hud{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 10px;display:flex;flex-direction:column;min-width:0}
+.stat span{font-size:11px;color:var(--muted);letter-spacing:.06em}
+.stat strong{font-family:var(--font-mono);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.3;white-space:nowrap}
+#hearts{color:var(--bad);letter-spacing:1px}
+
+.board{position:relative;border-radius:14px;overflow:hidden;background:var(--board)}
+canvas{display:block;width:100%;touch-action:none}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(14,22,30,.78);color:#f1ede3}
+.card{max-width:340px;width:100%;display:flex;flex-direction:column;gap:12px}
+.card h2{font-family:var(--font-display);font-weight:900;font-size:24px;margin:0;text-wrap:balance}
+.card p{margin:0;font-size:14px;color:#cdd5dc}
+.card ul{margin:0;padding-left:1.1em;font-size:14px;display:flex;flex-direction:column;gap:4px;color:#dfe5ea}
+.card .mono{font-family:var(--font-mono);font-weight:700;color:#f5c46e}
+.big{display:flex;gap:18px}
+.big div{display:flex;flex-direction:column}
+.big span{font-size:12px;color:#aab5be}
+.big strong{font-family:var(--font-mono);font-size:30px;line-height:1.2;color:#fff;font-variant-numeric:tabular-nums}
+.misses{font-size:13px;display:flex;flex-direction:column;gap:3px;max-height:120px;overflow:auto;color:#e2c0b8}
+.btn{appearance:none;border:0;border-radius:10px;padding:12px 18px;font:700 16px var(--font-body);background:var(--snake);color:#1b1407;cursor:pointer}
+.btn:focus-visible,.pad button:focus-visible,summary:focus-visible{outline:3px solid var(--good);outline-offset:2px}
+
+.toast{min-height:44px;font-size:14px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;align-items:center}
+.toast.good{border-left-color:var(--good)}
+.toast.bad{border-left-color:var(--bad)}
+.toast .mono{font-family:var(--font-mono);font-weight:700}
+
+.pad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(2,56px);gap:8px;justify-content:center}
+.pad button{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:12px;font-size:22px;cursor:pointer;touch-action:manipulation;user-select:none}
+.pad button:active{background:var(--line)}
+.pad .up{grid-column:2;grid-row:1}
+.pad .left{grid-column:1;grid-row:2}
+.pad .down{grid-column:2;grid-row:2}
+.pad .right{grid-column:3;grid-row:2}
+.keys{font-size:13px;color:var(--muted);text-align:center;margin:0}
+@media (hover:hover) and (pointer:fine){ .pad{display:none} }
+@media (hover:none),(pointer:coarse){ .keys{display:none} }
+
+details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+summary{cursor:pointer;font-weight:700}
+.table-wrap{overflow-x:auto;margin-top:10px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:4px 8px;text-align:left}
+th{font-size:12px;color:var(--muted);font-weight:500;letter-spacing:.06em;border-bottom:1px solid var(--line)}
+td{font-family:var(--font-mono);font-weight:500;font-variant-numeric:tabular-nums}
+td.zone{font-family:var(--font-body);font-size:12px;color:var(--muted)}
+tr.cut td{border-top:2px dashed var(--bad)}
+.foot{font-size:12px;color:var(--muted);margin:0}
+
+.lb{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.lb-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.lb-head h3{margin:0;font-size:16px;font-weight:900}
+.lb-head button{appearance:none;border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:8px;padding:3px 10px;font:500 12px var(--font-body);cursor:pointer}
+.lb ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.lb li{display:grid;grid-template-columns:2.2em 1fr auto;gap:8px;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--line);font-size:14px}
+.lb li:last-child{border-bottom:0}
+.lb li .rk{font-family:var(--font-mono);font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+.lb li:nth-child(1) .rk{color:var(--snake-head)}
+.lb li .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb li .sc{font-family:var(--font-mono);font-weight:700;font-variant-numeric:tabular-nums}
+.lb li.me{background:color-mix(in srgb, var(--snake) 18%, transparent);border-radius:6px;padding-inline:6px}
+.lb .empty{font-size:13px;color:var(--muted);margin:0}
+.name-row{display:flex;flex-direction:column;gap:4px}
+.name-row label{font-size:13px;color:#cdd5dc}
+.name-row input{font:500 16px var(--font-body);padding:10px 12px;border-radius:10px;border:1px solid #445664;background:#0f1a22;color:#f1ede3;width:100%}
+.name-row input:focus-visible{outline:3px solid var(--good);outline-offset:1px}
+.err{color:#ffb4a6;font-size:13px;min-height:1em}
+@media (prefers-reduced-motion: reduce){ *{transition:none!important;animation:none!important} }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">固收內訓小遊戲</div>
+    <h1>評等分類蛇</h1>
+    <p class="rule">只吃投資等級：S&amp;P <b>BBB-</b> 以上 · 穆迪 <b>Baa3</b> 以上</p>
+  </header>
+
+  <div class="hud">
+    <div class="stat"><span>分數</span><strong id="score">0</strong></div>
+    <div class="stat"><span>生命</span><strong id="hearts">♥♥♥</strong></div>
+    <div class="stat"><span>關卡</span><strong id="level">1</strong></div>
+    <div class="stat"><span>連擊</span><strong id="combo">×1</strong></div>
+  </div>
+
+  <div class="board" id="board">
+    <canvas id="cv" aria-label="遊戲畫面"></canvas>
+    <div class="overlay" id="overlay">
+      <div class="card" id="card"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">準備好了嗎？吃到 BBB- 這種「邊界評等」會有額外加分。</div>
+
+  <div class="pad" aria-label="方向鍵">
+    <button class="up" data-d="up" aria-label="上">▲</button>
+    <button class="left" data-d="left" aria-label="左">◀</button>
+    <button class="down" data-d="down" aria-label="下">▼</button>
+    <button class="right" data-d="right" aria-label="右">▶</button>
+  </div>
+  <p class="keys">方向鍵或 WASD 移動 · 空白鍵暫停</p>
+
+  <section class="lb" aria-label="排行榜">
+    <div class="lb-head"><h3>排行榜 Top 10</h3><button id="lbRefresh" type="button">重新整理</button></div>
+    <ol id="lbList"></ol>
+    <p class="empty" id="lbMsg">排行榜載入中…</p>
+  </section>
+
+  <details>
+    <summary>評等對照表（玩不過再偷看）</summary>
+    <div class="table-wrap">
+      <table id="cheat">
+        <thead><tr><th>S&amp;P / 惠譽</th><th>穆迪</th><th>分類</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </details>
+  <p class="foot">遊戲中的評等皆為教學用途，不代表任何特定債券。</p>
+</div>
+
+<script>
+(() => {
+  const COLS = 11, ROWS = 13;
+  const IG = [['AAA','Aaa'],['AA+','Aa1'],['AA','Aa2'],['AA-','Aa3'],['A+','A1'],['A','A2'],['A-','A3'],['BBB+','Baa1'],['BBB','Baa2'],['BBB-','Baa3']];
+  const HY = [['BB+','Ba1'],['BB','Ba2'],['BB-','Ba3'],['B+','B1'],['B','B2'],['B-','B3'],['CCC+','Caa1'],['CCC','Caa2'],['CCC-','Caa3'],['CC','Ca'],['C','C'],['D','—']];
+  const BOUNDARY = new Set(['BBB-','Baa3']);
+
+  // ---------- 排行榜（Supabase）：app.py 會把下面兩個值換成真正的設定 ----------
+  const SUPABASE_URL = "__SUPABASE_URL__";
+  const SUPABASE_KEY = "__SUPABASE_KEY__";
+  const TABLE = "snake_scores";
+  const LB_ON = SUPABASE_URL.startsWith('http') && !SUPABASE_KEY.startsWith('__');
+  const H = {apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY};
+  let playerName = '';
+  try { playerName = localStorage.getItem('rating-snake-name') || ''; } catch(e){}
+  let board = [];   // 每人只留最高分
+
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  async function loadBoard(){
+    const msg = document.getElementById('lbMsg');
+    if (!LB_ON){ msg.textContent = '排行榜尚未連線（直接開檔案時只能單機玩）。'; msg.hidden = false; return; }
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=name,score,correct&order=score.desc&limit=300`, {headers: H});
+      if (!r.ok) throw new Error(r.status);
+      const rows = await r.json();
+      const seen = new Set(); board = [];
+      rows.forEach(x => { if (!seen.has(x.name)){ seen.add(x.name); board.push(x); } });
+      renderBoard();
+    } catch(e){
+      msg.textContent = '排行榜暫時連不上，分數仍會照算，稍後按「重新整理」再試。'; msg.hidden = false;
+    }
+  }
+  function renderBoard(){
+    const list = document.getElementById('lbList'), msg = document.getElementById('lbMsg');
+    list.innerHTML = board.slice(0, 10).map((x, i) =>
+      `<li class="${x.name === playerName ? 'me' : ''}"><span class="rk">${i + 1}</span><span class="nm">${esc(x.name)}</span><span class="sc">${x.score}</span></li>`).join('');
+    msg.hidden = board.length > 0;
+    if (!board.length) msg.textContent = '還沒有人上榜，第一名等你來拿。';
+  }
+  async function submitScore(st){
+    if (!LB_ON || !playerName || st.score <= 0) return null;
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
+        method:'POST',
+        headers:{...H, 'Content-Type':'application/json', Prefer:'return=minimal'},
+        body: JSON.stringify({name: playerName, score: st.score, correct: st.correct, boundary_hits: st.boundaryHits})
+      });
+      if (!r.ok) throw new Error(r.status);
+      await loadBoard();
+      const idx = board.findIndex(x => x.name === playerName);
+      return idx >= 0 ? idx + 1 : null;
+    } catch(e){ return 'fail'; }
+  }
+
+  // cheat sheet
+  const tb = document.querySelector('#cheat tbody');
+  [...IG.map(r => [...r, '投資等級']), ...HY.map(r => [...r, '非投資等級'])].forEach((r, i) => {
+    const tr = document.createElement('tr');
+    if (i === IG.length) tr.className = 'cut';
+    tr.innerHTML = `<td>${r[0]}</td><td>${r[1]}</td><td class="zone">${r[2]}</td>`;
+    tb.appendChild(tr);
+  });
+
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  const $ = id => document.getElementById(id);
+  let cell = 30, colors = {};
+
+  function readColors(){
+    const cs = getComputedStyle(document.documentElement);
+    ['board','grid','snake','snake-head','chip','chip-ink','good','bad'].forEach(k => colors[k] = cs.getPropertyValue('--'+k).trim());
+  }
+  readColors();
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readColors(); draw(); }); } catch(e){}
+  new MutationObserver(() => { readColors(); draw(); }).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+
+  function resize(){
+    const w = cv.clientWidth || 360, dpr = window.devicePixelRatio || 1;
+    cell = w / COLS;
+    cv.style.height = (cell * ROWS) + 'px';
+    cv.width = Math.round(w * dpr); cv.height = Math.round(cell * ROWS * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+
+  // ---------- state ----------
+  let S;
+  function newState(){
+    return {
+      snake:[{x:4,y:6},{x:3,y:6},{x:2,y:6}],
+      dir:{x:1,y:0}, queue:[], foods:[],
+      score:0, hearts:3, level:1, combo:0, correct:0, boundaryHits:0,
+      misses:[], running:false, over:false, acc:0, flash:null
+    };
+  }
+  const rand = n => Math.floor(Math.random() * n);
+  const pick = a => a[rand(a.length)];
+  const speed = () => Math.max(85, 175 - (S.level - 1) * 15);
+
+  function makeLabel(ig){
+    const useMoody = S.level >= 2 && Math.random() < 0.5;
+    const col = useMoody ? 1 : 0;
+    let row;
+    if (ig) row = Math.random() < 0.35 ? IG[IG.length - 1 - rand(2)] : pick(IG);
+    else    row = Math.random() < 0.35 ? HY[rand(2)] : pick(HY.filter(r => r[col] !== '—'));
+    return { label: row[col], ig, agency: useMoody ? '穆迪' : 'S&P' };
+  }
+  function freeCell(){
+    for (let t = 0; t < 300; t++){
+      const x = rand(COLS), y = rand(ROWS);
+      if (S.snake.some(s => s.x === x && s.y === y)) continue;
+      if (S.foods.some(f => f.x === x && f.y === y)) continue;
+      const h = S.snake[0];
+      if (Math.abs(h.x - x) + Math.abs(h.y - y) < 2) continue;
+      return {x, y};
+    }
+    return null;
+  }
+  function addFood(ig){
+    const c = freeCell(); if (!c) return;
+    S.foods.push({...c, ...makeLabel(ig)});
+  }
+  function fillFoods(){
+    const wantIG = 2, wantHY = Math.min(2 + S.level - 1, 6);
+    while (S.foods.filter(f => f.ig).length < wantIG) addFood(true);
+    while (S.foods.filter(f => !f.ig).length < wantHY) addFood(false);
+  }
+
+  // ---------- UI ----------
+  function hud(){
+    $('score').textContent = S.score;
+    $('hearts').textContent = '♥'.repeat(S.hearts) + '♡'.repeat(3 - S.hearts);
+    $('level').textContent = S.level;
+    $('combo').textContent = '×' + mult();
+  }
+  const mult = () => Math.min(4, 1 + Math.floor(S.combo / 3));
+  function toast(html, kind){
+    const t = $('toast'); t.className = 'toast ' + (kind || ''); t.innerHTML = html;
+  }
+  let best = 0;
+  try { best = +localStorage.getItem('rating-snake-best') || 0; } catch(e){}
+
+  function showStart(){
+    $('card').innerHTML = `
+      <h2>規則很簡單</h2>
+      <ul>
+        <li>吃<b>投資等級</b>（<span class="mono">BBB-</span> / <span class="mono">Baa3</span> 以上）→ 變長加分</li>
+        <li>吃到<b>非投資等級</b> → 扣一顆心、身體變短</li>
+        <li>邊界評等 <span class="mono">BBB-</span>、<span class="mono">Baa3</span> 額外 +20</li>
+        <li>第 2 關起穆迪評等加入，撞牆或撞到自己就結束</li>
+      </ul>
+      <div class="name-row">
+        <label for="playerName">排行榜顯示名稱（例：西湖分行 王小明）</label>
+        <input id="playerName" maxlength="20" autocomplete="off" value="${esc(playerName)}">
+        <div class="err" id="nameErr"></div>
+      </div>
+      <button class="btn" id="go">開始遊戲</button>
+      ${best ? `<p>你的最佳紀錄：<span class="mono">${best}</span> 分</p>` : ''}`;
+    $('overlay').hidden = false;
+    $('go').onclick = startWithName;
+    $('playerName').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); startWithName(); } });
+    (playerName ? $('go') : $('playerName')).focus();
+  }
+  function startWithName(){
+    const inp = $('playerName');
+    if (inp){
+      const v = inp.value.trim();
+      if (!v){ $('nameErr').textContent = '請先輸入名字，才能登上排行榜。'; inp.focus(); return; }
+      playerName = v.slice(0, 20);
+      try { localStorage.setItem('rating-snake-name', playerName); } catch(e){}
+      renderBoard();
+    }
+    start();
+  }
+  function showPause(){
+    $('card').innerHTML = `<h2>暫停中</h2><p>喝口水，順便複習一下 BBB- 和 BB+ 的差別。</p><button class="btn" id="go">繼續</button>`;
+    $('overlay').hidden = false; $('go').onclick = resume; $('go').focus();
+  }
+  function explain(m){
+    const line = m.agency === '穆迪' ? 'Baa3' : 'BBB-';
+    return `<div><span class="mono">${m.label}</span>：${m.agency} 非投資等級，底線是 ${line}</div>`;
+  }
+  function showOver(reason){
+    S.running = false; S.over = true;
+    const isBest = S.score > best;
+    if (isBest){ best = S.score; try { localStorage.setItem('rating-snake-best', best); } catch(e){} }
+    const uniq = []; const seen = new Set();
+    S.misses.forEach(m => { if (!seen.has(m.label)){ seen.add(m.label); uniq.push(m); } });
+    $('card').innerHTML = `
+      <h2>${reason}</h2>
+      <div class="big">
+        <div><span>分數</span><strong>${S.score}</strong></div>
+        <div><span>吃對</span><strong>${S.correct}</strong></div>
+        <div><span>邊界題</span><strong>${S.boundaryHits}</strong></div>
+      </div>
+      <p>${isBest ? '個人新紀錄！' : `個人最佳 ${best} 分`}</p>
+      <p id="rankLine">${LB_ON && S.score > 0 ? '分數上傳中…' : ''}</p>
+      ${uniq.length ? `<p>這次誤食的評等：</p><div class="misses">${uniq.map(explain).join('')}</div>` : '<p>零誤食，評等觀念很穩。</p>'}
+      <button class="btn" id="go">再玩一次</button>
+      <button class="btn" id="swap" style="background:transparent;color:#f1ede3;border:1px solid #556877">換人玩</button>`;
+    $('overlay').hidden = false; $('go').onclick = start; $('swap').onclick = showStart; $('go').focus();
+    toast(`本局結束：${S.score} 分，吃對 ${S.correct} 個投資等級。`, '');
+    const snap = S;
+    submitScore(snap).then(rank => {
+      const el = $('rankLine'); if (!el || S !== snap) return;
+      if (rank === 'fail') el.textContent = '分數上傳失敗，請檢查網路後再玩一局。';
+      else if (rank) el.innerHTML = `<b>${esc(playerName)}</b> 目前排行榜第 <span class="mono">${rank}</span> 名`;
+      else el.textContent = '';
+    });
+  }
+
+  function start(){
+    S = newState(); fillFoods(); hud();
+    $('overlay').hidden = true;
+    toast('第 1 關：S&P 評等。只吃 <span class="mono">BBB-</span> 以上！', '');
+    S.running = true; last = performance.now();
+  }
+  function resume(){ $('overlay').hidden = true; S.running = true; last = performance.now(); }
+  function pause(){ if (S.running && !S.over){ S.running = false; showPause(); } }
+
+  // ---------- game step ----------
+  function step(){
+    if (S.queue.length) S.dir = S.queue.shift();
+    const h = S.snake[0], nh = {x:h.x + S.dir.x, y:h.y + S.dir.y};
+    if (nh.x < 0 || nh.y < 0 || nh.x >= COLS || nh.y >= ROWS) return showOver('撞牆了！');
+    const body = S.snake.slice(0, -1);
+    if (body.some(s => s.x === nh.x && s.y === nh.y)) return showOver('咬到自己了！');
+    S.snake.unshift(nh);
+
+    const fi = S.foods.findIndex(f => f.x === nh.x && f.y === nh.y);
+    if (fi < 0){ S.snake.pop(); return; }
+    const f = S.foods.splice(fi, 1)[0];
+    if (f.ig){
+      S.combo++; S.correct++;
+      const bonus = BOUNDARY.has(f.label) ? 20 : 0;
+      if (bonus) S.boundaryHits++;
+      const gain = 10 * mult() + bonus;
+      S.score += gain;
+      S.flash = {c: colors.good, t: performance.now()};
+      toast(bonus
+        ? `<span class="mono">${f.label}</span>&nbsp;✓ 投資等級的最後一階，邊界加分 +${gain}`
+        : `<span class="mono">${f.label}</span>&nbsp;✓ ${f.agency} 投資等級 +${gain}`, 'good');
+      const lv = Math.min(6, 1 + Math.floor(S.correct / 6));
+      if (lv > S.level){
+        S.level = lv;
+        toast(lv === 2
+          ? '第 2 關：穆迪評等加入！投資等級底線是 <span class="mono">Baa3</span>'
+          : `第 ${lv} 關：速度變快，垃圾債也變多了`, 'good');
+      }
+    } else {
+      S.combo = 0; S.hearts--;
+      S.misses.push(f);
+      S.snake.pop();
+      for (let i = 0; i < 2 && S.snake.length > 3; i++) S.snake.pop();
+      S.flash = {c: colors.bad, t: performance.now()};
+      const line = f.agency === '穆迪' ? 'Baa3' : 'BBB-';
+      toast(`<span class="mono">${f.label}</span>&nbsp;✗ 這是非投資等級（高收益債），${f.agency} 的底線是 <span class="mono">${line}</span>`, 'bad');
+      if (S.hearts <= 0){ hud(); return showOver('生命用完了！'); }
+    }
+    fillFoods(); hud();
+  }
+
+  // ---------- drawing ----------
+  function rr(x, y, w, h, r){
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
+    else { ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  }
+  function draw(){
+    if (!S) return;
+    const W = cell * COLS, H = cell * ROWS;
+    ctx.fillStyle = colors.board; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = colors.grid;
+    for (let x = 1; x < COLS; x++) for (let y = 1; y < ROWS; y++){
+      ctx.beginPath(); ctx.arc(x * cell, y * cell, 1.2, 0, Math.PI * 2); ctx.fill();
+    }
+    // foods (all chips look identical on purpose: you must read the rating)
+    S.foods.forEach(f => {
+      const p = 2;
+      rr(f.x * cell + p, f.y * cell + p + 1, cell - p * 2, cell - p * 2 - 2, 6);
+      ctx.fillStyle = colors.chip; ctx.fill();
+      let fs = cell * 0.36;
+      ctx.font = `700 ${fs}px "IBM Plex Mono", ui-monospace, monospace`;
+      const tw = ctx.measureText(f.label).width, room = cell - 7;
+      if (tw > room){ fs *= room / tw; ctx.font = `700 ${fs}px "IBM Plex Mono", ui-monospace, monospace`; }
+      ctx.fillStyle = colors['chip-ink']; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(f.label, f.x * cell + cell / 2, f.y * cell + cell / 2 + 1);
+    });
+    // snake
+    S.snake.forEach((s, i) => {
+      rr(s.x * cell + 1.5, s.y * cell + 1.5, cell - 3, cell - 3, i === 0 ? 9 : 6);
+      ctx.fillStyle = i === 0 ? colors['snake-head'] : colors.snake; ctx.fill();
+    });
+    const h = S.snake[0], d = S.dir, cx = h.x * cell + cell / 2, cy = h.y * cell + cell / 2;
+    const ex = d.y !== 0 ? cell * 0.2 : 0, ey = d.x !== 0 ? cell * 0.2 : 0;
+    ctx.fillStyle = '#1b1407';
+    [[1],[-1]].forEach(([k]) => {
+      ctx.beginPath(); ctx.arc(cx + d.x * cell * 0.15 + ex * k, cy + d.y * cell * 0.15 + ey * k, cell * 0.08, 0, Math.PI * 2); ctx.fill();
+    });
+    // flash
+    if (S.flash){
+      const a = 1 - (performance.now() - S.flash.t) / 300;
+      if (a > 0){ ctx.globalAlpha = a * 0.28; ctx.fillStyle = S.flash.c; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+      else S.flash = null;
+    }
+  }
+
+  let last = performance.now();
+  function loop(now){
+    if (S && S.running){
+      S.acc += now - last;
+      while (S.running && S.acc >= speed()){ S.acc -= speed(); step(); }
+    }
+    last = now;
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- input ----------
+  const DIRS = {up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0}};
+  function setDir(name){
+    if (!S || !S.running) return;
+    const nd = DIRS[name], lastD = S.queue.length ? S.queue[S.queue.length - 1] : S.dir;
+    if (nd.x === -lastD.x && nd.y === -lastD.y) return;
+    if (nd.x === lastD.x && nd.y === lastD.y) return;
+    if (S.queue.length < 2) S.queue.push(nd);
+  }
+  const KEYS = {ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',w:'up',s:'down',a:'left',d:'right',W:'up',S:'down',A:'left',D:'right'};
+  window.addEventListener('keydown', e => {
+    if (e.target && e.target.tagName === 'INPUT') return;
+    if (KEYS[e.key]){ e.preventDefault(); setDir(KEYS[e.key]); }
+    else if (e.key === ' '){
+      e.preventDefault();
+      if (S.running) pause();
+      else if (!$('overlay').hidden) $('go') && $('go').click();
+    }
+  });
+  document.querySelectorAll('.pad button').forEach(b =>
+    b.addEventListener('pointerdown', e => { e.preventDefault(); setDir(b.dataset.d); }));
+  let sw = null;
+  cv.addEventListener('pointerdown', e => { sw = {x:e.clientX, y:e.clientY}; });
+  cv.addEventListener('pointermove', e => {
+    if (!sw) return;
+    const dx = e.clientX - sw.x, dy = e.clientY - sw.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 22) return;
+    setDir(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+    sw = {x:e.clientX, y:e.clientY};
+  });
+  ['pointerup','pointercancel','pointerleave'].forEach(t => cv.addEventListener(t, () => sw = null));
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+
+  // initial demo frame under the start card
+  S = newState();
+  S.foods = [{x:7,y:3,label:'BBB-',ig:true,agency:'S&P'},{x:8,y:9,label:'A+',ig:true,agency:'S&P'},
+             {x:2,y:10,label:'BB+',ig:false,agency:'S&P'},{x:6,y:7,label:'CCC',ig:false,agency:'S&P'}];
+  hud();
+  window.addEventListener('resize', resize);
+  resize();
+  showStart();
+  document.getElementById('lbRefresh').onclick = loadBoard;
+  loadBoard();
+  requestAnimationFrame(loop);
+})();
+</script>
